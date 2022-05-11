@@ -1,13 +1,18 @@
-Shader "N3/DetailLambert"
+Shader "N3/DetailBlinnPhong"
 {
     Properties
     {
         _Tint("Color", Color) = (1, 1, 1, 1)
+        _GlobalLightColor("Global Light Color", Color) = (1, 1, 1, 1)
+        _LightColor("Light Color", Color) = (1, 1, 1, 1)
         _MainTex("Main", 2D) = "white" {}
         _Color1Tex("Color 1", 2D) = "white" {}
         _Color2Tex("Color 2", 2D) = "white" {}
         _LightDirection("Light Direction", Vector) = (0,1,0,0)
         _Intensity("Intensity",Float) = 1
+        _Specular("Specular",Float) = 0.5
+        _SpecularIntensity("Specular Intensity",Float) = 0.5
+        [MaterialToggle] _Blinn("Blinn Specular Enabled",Float) = 0
     }
         SubShader
         {
@@ -20,7 +25,8 @@ Shader "N3/DetailLambert"
                 #pragma vertex vert
                 #pragma fragment frag
 
-                #include "UnityCG.cginc"
+               // #include "UnityCG.cginc"
+                #include "UnityStandardBRDF.cginc"
 
                 sampler2D _MainTex;
                 sampler2D _Color1Tex;
@@ -33,9 +39,13 @@ Shader "N3/DetailLambert"
                 float4 _Tint;
                 float4 _LightDirection;
                 float4 _LightColor;
+                float4 _GlobalLightColor;
 
                 float _Intensity;
+                float _Specular;
+                float _SpecularIntensity;
 
+                float _Blinn;
                 struct appdata
                 {
                     float4 object_pos : POSITION;
@@ -84,6 +94,9 @@ Shader "N3/DetailLambert"
                 {
                     i.normal = normalize(i.normal);
 
+                    float3 viewDir = normalize( _WorldSpaceCameraPos - i.world_position );
+                    
+
                     _LightDirection = normalize(_LightDirection) * _Intensity;
 
                     _LightDirection.x = max(0, _LightDirection.x);
@@ -98,11 +111,27 @@ Shader "N3/DetailLambert"
                     //texture color
                     fixed4 color = _Tint * (main.r * color1 + (1 - main.r) * color2);
 
+                    //global light illumination
+                    fixed4 global = _GlobalLightColor * _Intensity * color;
+                   
                     //lambert diffuse color
                     fixed4 diffuse = color * dot(float3(_LightDirection.x, _LightDirection.y, _LightDirection.z), i.normal);
 
+                    fixed4 specular;
 
-                    return  saturate(diffuse) ;
+                    if (!_Blinn) 
+                    {
+                        float3 reflectionDir = reflect(-_LightDirection, i.normal);
+                        specular = _LightColor * _Intensity * _SpecularIntensity * pow(DotClamped(viewDir, reflectionDir), _Specular*100);
+                    }
+                    else {
+                        float3 halfVector = normalize(_LightDirection + viewDir);
+                        specular = pow(DotClamped(halfVector, i.normal), _Specular*100);
+                    }
+
+                    return global + saturate(diffuse) + specular;
+                    //  return global  +  specular;
+                    //return specular;
                 }
 
                 ENDCG
